@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>体験記 音声化バッチツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  /* ===== ロック画面用スタイル ===== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  }
+  #lock-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 20px;
+    background: #f4f4f7;
+  }
+  #lock-box {
+    background: #fff;
+    padding: 40px 32px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+  }
+  #lock-box h2 {
+    font-size: 18px;
+    margin-bottom: 24px;
+    color: #333;
+  }
+  #lock-box input {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  #lock-box button {
+    width: 100%;
+    padding: 10px;
+    background: #333;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  #lock-box button:hover {
+    background: #555;
+  }
+  #error-msg {
+    color: #d33;
+    font-size: 13px;
+    margin-top: 12px;
+    min-height: 16px;
+  }
+  #content {
+    display: none;
+  }
+
+  /* ===== 体験記音声化バッチツール用スタイル ===== */
+<style>
+  :root{
+    --bg:#15171A;--surface:#1D2024;--surface-2:#23262B;
+    --border:#2C3038;--border-soft:#25282E;
+    --text:#ECEDEE;--text-dim:#9298A1;--text-faint:#5E6470;
+    --accent:#FF9F40;--accent-dim:#7A5430;--accent-bg:rgba(255,159,64,0.10);
+    --green:#5FD68A;--green-bg:rgba(95,214,138,0.10);
+    --red:#FF6B6B;--red-bg:rgba(255,107,107,0.10);
+    --female:#F2789F;--female-bg:rgba(242,120,159,0.12);
+    --male:#5B9DF0;--male-bg:rgba(91,157,240,0.12);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Noto Sans JP",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);}
+  body{font-family:var(--sans);color:var(--text);padding:28px 18px 80px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:900px;margin:0 auto;}
+
+  .hero{display:flex;align-items:center;gap:18px;padding:22px;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,var(--surface),var(--bg));margin-bottom:22px;}
+  .meter{display:flex;align-items:flex-end;gap:3px;height:34px;flex-shrink:0;}
+  .meter .bar{width:4px;background:var(--accent-dim);border-radius:2px;transition:height .15s ease,background .15s ease;}
+  .hero h1{font-size:19px;margin:0 0 4px;letter-spacing:.2px;}
+  .hero p{margin:0;color:var(--text-dim);font-size:13px;}
+  .eyebrow{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;}
+
+  .panel{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+  .panel-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text);margin:0 0 12px;}
+  .panel-title .tag{font-family:var(--mono);font-size:10px;color:var(--text-faint);border:1px solid var(--border);padding:1px 6px;border-radius:4px;}
+  .hint{font-size:12px;color:var(--text-dim);margin:4px 0 10px;}
+
+  label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px;}
+  input[type=text],input[type=password],textarea,select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:9px 10px;font-family:var(--sans);font-size:13.5px;outline:none;}
+  input[type=text]:focus,input[type=password]:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);}
+  textarea{resize:vertical;line-height:1.6;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .row>div{flex:1;min-width:120px;}
+
+  button{font-family:var(--sans);font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:9px 14px;cursor:pointer;transition:border-color .15s,background .15s,opacity .15s;}
+  button:hover{border-color:var(--text-faint);}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#1A1306;font-weight:700;}
+  button.primary:hover{filter:brightness(1.06);}
+  button.ghost{background:transparent;}
+  button.small{padding:5px 10px;font-size:12px;}
+
+  .key-row{display:flex;gap:10px;align-items:flex-end;}
+  .key-row>div{flex:1;}
+  .key-note{font-size:11.5px;color:var(--text-faint);margin-top:6px;}
+
+  /* ---- quota banner ---- */
+  .quota-banner{border:1px solid var(--red);background:var(--red-bg);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:none;}
+  .quota-banner.show{display:block;}
+  .quota-banner .qb-head{font-size:14px;font-weight:700;color:var(--red);margin-bottom:6px;}
+  .quota-banner .qb-body{font-size:13px;color:var(--text-dim);margin-bottom:12px;}
+  .quota-banner .qb-actions{display:flex;gap:8px;}
+
+  details>summary{cursor:pointer;font-size:12.5px;color:var(--text-dim);list-style:none;display:flex;align-items:center;gap:6px;}
+  details>summary::-webkit-details-marker{display:none;}
+  details>summary:before{content:'▸';font-size:10px;transition:transform .15s;}
+  details[open]>summary:before{transform:rotate(90deg);}
+  details[open]>summary{margin-bottom:10px;}
+
+  .tabbar{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);}
+  .tabbtn{background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-dim);padding:8px 4px;margin-right:18px;font-size:13px;border-radius:0;}
+  .tabbtn.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600;}
+  .tabpane{display:none;}
+  .tabpane.active{display:block;}
+
+  table.preview{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0;}
+  table.preview th,table.preview td{border:1px solid var(--border-soft);padding:6px 8px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-dim);}
+  table.preview th{color:var(--text-faint);font-weight:500;font-family:var(--mono);font-size:11px;}
+
+  .badge{font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:99px;border:1px solid transparent;}
+  .badge.warn{color:var(--accent);background:var(--accent-bg);}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .toolbar .count{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
+  .progress-outer{flex:1;min-width:140px;height:5px;background:var(--surface-2);border-radius:3px;overflow:hidden;}
+  .progress-inner{height:100%;width:0%;background:var(--accent);transition:width .2s ease;}
+
+  /* ---- item card ---- */
+  .item{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:14px 16px;margin-bottom:12px;}
+  .item-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .item-head .fi-id{width:88px;flex:none;font-size:12.5px;padding:6px 8px;font-family:var(--mono);}
+  .item-head .fi-name{width:120px;flex:none;font-size:12.5px;padding:6px 8px;}
+  .item-head select.gender{width:auto;flex:none;font-size:12.5px;padding:6px 8px;}
+  .filename-preview{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);margin-left:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+
+  .status{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:99px;margin-left:auto;white-space:nowrap;}
+  .status.idle{color:var(--text-faint);background:var(--surface-2);}
+  .status.processing{color:var(--accent);background:var(--accent-bg);}
+  .status.converting{color:var(--accent);background:var(--accent-bg);}
+  .status.done{color:var(--green);background:var(--green-bg);}
+  .status.error{color:var(--red);background:var(--red-bg);}
+
+  .item textarea.body{min-height:86px;font-size:13px;margin-bottom:8px;}
+  .charcount{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);text-align:right;margin:-4px 0 8px;}
+  .item-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .progress-text{font-size:12px;color:var(--text-dim);font-family:var(--mono);}
+  .error-text{font-size:12px;color:var(--red);margin-top:6px;}
+  .error-text.quota{font-weight:600;font-size:13px;color:var(--red);}
+  .audio-area{margin-top:10px;padding-top:10px;border-top:1px solid var(--border-soft);display:none;}
+  .audio-area.show{display:block;}
+  audio{width:100%;height:32px;margin-bottom:8px;}
+  .dl-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .fallback-note{font-size:11.5px;color:var(--text-faint);}
+  .fallback-note a{color:var(--accent);}
+
+  .empty{text-align:center;color:var(--text-faint);font-size:13px;padding:30px 10px;border:1px dashed var(--border);border-radius:10px;}
+  .checklist{font-size:12px;color:var(--text-dim);margin:0;padding-left:18px;}
+  .checklist li{margin-bottom:4px;}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 16px;border-radius:8px;font-size:12.5px;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;font-family:var(--mono);}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+</style>
+</style>
+</head>
+<body>
+
+<div id="lock-screen">
+  <div id="lock-box">
+    <h2>このページはパスワードで保護されています</h2>
+    <input type="text" id="username" placeholder="ユーザー名">
+    <input type="password" id="password" placeholder="パスワード">
+    <button onclick="checkLogin()">ログイン</button>
+    <p id="error-msg"></p>
+  </div>
+</div>
+
+<div id="content">
+<div class="wrap">
+
+  <div class="hero">
+    <div class="meter" id="heroMeter"></div>
+    <div>
+      <div class="eyebrow">Batch Voice Studio</div>
+      <h1>体験記 音声化バッチツール</h1>
+      <p>Gemini 3.1 Flash TTS で体験記をまとめて読み上げ → WAV / M4A を書き出します。</p>
+    </div>
+  </div>
+
+  <!-- API KEY -->
+  <div class="panel">
+    <div class="panel-title">APIキー <span class="tag">必須</span></div>
+    <div class="key-row">
+      <div>
+        <label for="apiKey">Gemini APIキー</label>
+        <input type="password" id="apiKey" placeholder="AIza...">
+      </div>
+      <button class="ghost small" id="toggleKeyBtn" type="button">表示</button>
+    </div>
+    <div class="key-note">このブラウザ内のみで保持。Google の Generative Language API に直接送信されます。サーバーには保存されません。</div>
+  </div>
+
+  <!-- QUOTA BANNER（上限超過時に表示） -->
+  <div class="quota-banner" id="quotaBanner">
+    <div class="qb-head">⚠ APIキーの1日の利用上限に達しました</div>
+    <div class="qb-body">
+      別のAPIキーをお持ちの場合は、上のAPIキー欄に貼り替えてから、エラーになった体験記を個別に「再生成する」ボタンで再試行してください。<br>
+      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。
+    </div>
+    <div class="qb-actions">
+      <button class="primary small" id="quotaBannerFocus" type="button">APIキー欄へ移動</button>
+      <button class="ghost small" id="quotaBannerClose" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ADVANCED TEMPLATE SETTINGS -->
+  <div class="panel">
+    <details id="advDetails">
+      <summary>読み上げ設定（Scene / Sample Context / 話し方の指定）を編集する</summary>
+      <div class="hint">マニュアルの初期値が入っています。通常はそのままでOKです。</div>
+      <label for="tplScene">Scene</label>
+      <textarea id="tplScene" rows="2"></textarea>
+      <div style="height:10px"></div>
+      <label for="tplContext">Sample Context</label>
+      <textarea id="tplContext" rows="2"></textarea>
+      <div style="height:10px"></div>
+      <label for="tplInstr">話し方の指定</label>
+      <textarea id="tplInstr" rows="7"></textarea>
+      <div style="height:10px"></div>
+      <div class="row">
+        <div>
+          <label for="chunkSize">1ブロックあたりの最大文字数（長文の自動分割・0で分割なし＝無制限）</label>
+          <input type="text" id="chunkSize" value="1000">
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- ADD ITEMS -->
+  <div class="panel">
+    <div class="panel-title">体験記を追加</div>
+    <div class="tabbar">
+      <button class="tabbtn active" data-tab="bulk" type="button">スプレッドシートから貼り付け</button>
+      <button class="tabbtn" data-tab="single" type="button">1件ずつ追加</button>
+    </div>
+
+    <!-- 一括貼り付けタブ -->
+    <div class="tabpane active" id="tab-bulk">
+      <div class="hint">音声化対象一覧シートの行（生徒ID・生徒名・性別・本文を含む範囲）をそのままコピーして貼り付けてください。列は自動認識します。</div>
+      <textarea id="bulkPaste" rows="5" placeholder="ここにスプレッドシートの行を貼り付け（Ctrl/Cmd+V）"></textarea>
+      <div id="bulkConfig" style="display:none; margin-top:12px;">
+        <div class="row">
+          <div>
+            <label for="bulkIdCol">生徒IDの列</label>
+            <select id="bulkIdCol"></select>
+          </div>
+          <div>
+            <label for="bulkNameCol">生徒名の列</label>
+            <select id="bulkNameCol"></select>
+          </div>
+          <div>
+            <label for="bulkGenderCol">性別の列</label>
+            <select id="bulkGenderCol"></select>
+          </div>
+          <div>
+            <label for="bulkTextCol">本文の列</label>
+            <select id="bulkTextCol"></select>
+          </div>
+          <div style="flex:0 0 auto;display:flex;align-items:flex-end;padding-bottom:9px;">
+            <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-dim);">
+              <input type="checkbox" id="bulkHasHeader" style="width:auto;"> 1行目はヘッダー
+            </label>
+          </div>
+        </div>
+        <div id="bulkPreviewWrap" style="overflow-x:auto;"></div>
+        <button class="primary" id="bulkAddBtn" type="button">この内容をリストに追加</button>
+      </div>
+    </div>
+
+    <!-- 1件ずつタブ -->
+    <div class="tabpane" id="tab-single">
+      <div class="row" style="margin-bottom:10px;">
+        <div style="flex:0 0 110px;">
+          <label for="singleStudentId">生徒ID</label>
+          <input type="text" id="singleStudentId" placeholder="例：11111">
+        </div>
+        <div>
+          <label for="singleStudentName">生徒名</label>
+          <input type="text" id="singleStudentName" placeholder="例：花山花子">
+        </div>
+        <div style="flex:0 0 170px;">
+          <label>性別</label>
+          <select id="singleGender">
+            <option value="female">女性（Aoede）</option>
+            <option value="male">男性（Charon）</option>
+          </select>
+        </div>
+      </div>
+      <label for="singleText">体験記本文</label>
+      <textarea id="singleText" rows="5" placeholder="体験記の本文を貼り付け"></textarea>
+      <div style="margin-top:10px;text-align:right;">
+        <button class="primary" id="singleAddBtn" type="button">リストに追加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRE-CHECK -->
+  <div class="panel">
+    <div class="panel-title">音声化前のチェック <span class="tag">手動</span></div>
+    <ul class="checklist">
+      <li>講師の名前はひらがなに変更（誤読防止）</li>
+      <li>アルファベット表記はカナに変更（例：TEAP → ティープ）</li>
+      <li>「志作文」は「しさくぶん」に変更（「こころざしぶん」と誤読されるため）</li>
+    </ul>
+    <div class="hint" style="margin-top:8px;margin-bottom:0;">下の各カードの本文は直接編集できます。生成前に確認・修正してください。</div>
+  </div>
+
+  <!-- LIST -->
+  <div class="toolbar">
+    <div class="count" id="itemCount">0件</div>
+    <div class="progress-outer"><div class="progress-inner" id="batchProgress"></div></div>
+    <button class="ghost small" id="downloadAllBtn" type="button">ZIPで一括ダウンロード</button>
+    <button class="primary" id="generateAllBtn" type="button">すべて音声化</button>
+  </div>
+
+  <div id="itemList"></div>
+  <div class="empty" id="emptyState">まだ体験記がありません。上の「体験記を追加」から追加してください。</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+</div>
+
+<script>
+  const VALID_USER = "kouhou";
+  const VALID_PASS = "isf9hvba2";
+
+  function checkLogin() {
+    const user = document.getElementById('username').value;
+    const pass = document.getElementById('password').value;
+
+    if (user === VALID_USER && pass === VALID_PASS) {
+      document.getElementById('lock-screen').style.display = 'none';
+      document.getElementById('content').style.display = 'block';
+    } else {
+      document.getElementById('error-msg').innerText = "ユーザー名またはパスワードが違います";
+    }
+  }
+
+  // Enterキーでもログインできるようにする
+  document.getElementById('password').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') checkLogin();
+  });
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- defaults ---------- */
+  const DEFAULT_SCENE = "ハキハキとしたクリアな声質で一定の安定したナレーション。ボソボソ喋ったり、ささやき声にしたりしないでください。";
+  const DEFAULT_CONTEXT = "Sample Context：高校生が大学受験の経験を振り返り、合格の喜びを高校生らしく語るナレーション。「東進」のイントネーションは下がる";
+  // ① Speaker1〜Speaker10以上すべてに対して同一の声質を維持するよう明示
+  const DEFAULT_INSTR =
+"【話し方の指定】\n" +
+"・Speaker1とSpeaker2とSpeaker3とSpeaker4とSpeaker5とSpeaker6とSpeaker7とSpeaker8とSpeaker9とSpeaker10、すべてのSpeakerの声質が変わらないように全て一定のトーンを保ってください。\n" +
+"・「東進」のイントネーションは下がる\n" +
+"・ハキハキとした聞き取りやすい声で朗読してください。\n" +
+"・絶対にボソボソとしたつぶやき声や、ささやき声にしないでください。\n" +
+"・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
+
+  const CONVERTER_URL = "https://bright-tiramisu-ac6630.netlify.app/";
+  const MODEL = "gemini-3.1-flash-tts-preview";
+
+  /* ---------- state ---------- */
+  // ② studentId / studentName でファイル名を構成
+  let items = [];
+  let nextId = 1;
+  let bulkRows = [];
+
+  /* ---------- dom ---------- */
+  const $ = id => document.getElementById(id);
+  const apiKeyInput = $("apiKey");
+  const itemListEl = $("itemList");
+  const emptyStateEl = $("emptyState");
+  const itemCountEl = $("itemCount");
+  const batchProgressEl = $("batchProgress");
+  const toastEl = $("toast");
+
+  $("tplScene").value = DEFAULT_SCENE;
+  $("tplContext").value = DEFAULT_CONTEXT;
+  $("tplInstr").value = DEFAULT_INSTR;
+
+  /* ---------- toast ---------- */
+  let toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> toastEl.classList.remove("show"), 2800);
+  }
+
+  /* ---------- ③ quota banner ---------- */
+  function showQuotaBanner(){
+    $("quotaBanner").classList.add("show");
+    $("quotaBanner").scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+  $("quotaBannerClose").addEventListener("click", ()=> $("quotaBanner").classList.remove("show"));
+  $("quotaBannerFocus").addEventListener("click", ()=>{
+    apiKeyInput.focus();
+    apiKeyInput.scrollIntoView({behavior:"smooth", block:"center"});
+    const orig = apiKeyInput.style.borderColor;
+    apiKeyInput.style.borderColor = "var(--red)";
+    apiKeyInput.style.boxShadow = "0 0 0 3px rgba(255,107,107,0.25)";
+    setTimeout(()=>{ apiKeyInput.style.borderColor=orig; apiKeyInput.style.boxShadow=""; }, 2200);
+  });
+
+  /* ---------- hero meter ---------- */
+  (function(){
+    const meter = $("heroMeter");
+    const bars = [];
+    for(let i=0;i<14;i++){
+      const b = document.createElement("div");
+      b.className="bar"; meter.appendChild(b); bars.push(b);
+    }
+    function tick(){
+      const active = items.some(it => it.status==="processing"||it.status==="converting");
+      bars.forEach((b,i)=>{
+        b.style.height = (4+Math.abs(Math.sin((Date.now()/260)+i))*(active?28:10)).toFixed(1)+"px";
+        b.style.background = active?"var(--accent)":"var(--accent-dim)";
+      });
+      requestAnimationFrame(tick);
+    }
+    tick();
+  })();
+
+  /* ---------- api key show/hide ---------- */
+  $("toggleKeyBtn").addEventListener("click", ()=>{
+    const isPw = apiKeyInput.type==="password";
+    apiKeyInput.type = isPw?"text":"password";
+    $("toggleKeyBtn").textContent = isPw?"隠す":"表示";
+  });
+
+  /* ---------- tabs ---------- */
+  document.querySelectorAll(".tabbtn").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll(".tabbtn").forEach(b=>b.classList.remove("active"));
+      document.querySelectorAll(".tabpane").forEach(p=>p.classList.remove("active"));
+      btn.classList.add("active");
+      $("tab-"+btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  /* ---------- filename helper ---------- */
+  function itemFilename(item){
+    const raw = (item.studentId + item.studentName).trim();
+    return raw.replace(/[\\/:*?"<>|\s]/g,"_") || "voice_"+item.id;
+  }
+
+  /* ---------- bulk paste ---------- */
+  function parseBulk(raw){
+    return raw.replace(/\r/g,"").split("\n")
+      .filter(l=>l.trim().length>0)
+      .map(l=>l.split("\t"));
+  }
+
+  function guessGender(cell){
+    if(!cell) return null;
+    if(cell.indexOf("女")!==-1) return "female";
+    if(cell.indexOf("男")!==-1) return "male";
+    return null;
+  }
+
+  function renderBulkPreview(){
+    const cfgEl = $("bulkConfig");
+    if(bulkRows.length===0){ cfgEl.style.display="none"; return; }
+    cfgEl.style.display="block";
+    const colCount = Math.max(...bulkRows.map(r=>r.length));
+
+    // 平均文字数（本文推定）
+    let avgLens = [];
+    for(let c=0;c<colCount;c++){
+      let sum=0,n=0;
+      bulkRows.forEach(r=>{ if(r[c]){ sum+=r[c].length; n++; } });
+      avgLens.push(n?sum/n:0);
+    }
+    const guessedTextCol = avgLens.indexOf(Math.max(...avgLens));
+
+    // 性別列（男/女 が最多含まれる列）
+    let genderHits = [];
+    for(let c=0;c<colCount;c++){
+      let hits=0;
+      bulkRows.forEach(r=>{ if(guessGender(r[c])) hits++; });
+      genderHits.push(hits);
+    }
+    let guessedGenderCol = -1;
+    const maxHits = Math.max(...genderHits);
+    if(maxHits>0) guessedGenderCol = genderHits.indexOf(maxHits);
+
+    // ID列（数字のみ3〜8桁が多い列）
+    let idScore = [];
+    for(let c=0;c<colCount;c++){
+      let sc=0,n=0;
+      bulkRows.forEach(r=>{ if(r[c]){ n++; if(/^\d{3,8}$/.test(r[c].trim())) sc++; } });
+      idScore.push(n>0?sc/n:0);
+    }
+    let guessedIdCol = -1;
+    const maxId = Math.max(...idScore);
+    if(maxId>0.3) guessedIdCol = idScore.indexOf(maxId);
+
+    // 氏名列（短めテキスト、本文/性別/ID 以外）
+    let guessedNameCol = -1;
+    for(let c=0;c<colCount;c++){
+      if(c===guessedTextCol||c===guessedGenderCol||c===guessedIdCol) continue;
+      if(avgLens[c]>1 && avgLens[c]<20){ guessedNameCol=c; break; }
+    }
+
+    const noneOpt = '<option value="-1">（なし）</option>';
+    const textSel=$("bulkTextCol"), genderSel=$("bulkGenderCol");
+    const idSel=$("bulkIdCol"), nameSel=$("bulkNameCol");
+    textSel.innerHTML=""; genderSel.innerHTML=noneOpt;
+    idSel.innerHTML=noneOpt; nameSel.innerHTML=noneOpt;
+
+    for(let c=0;c<colCount;c++){
+      const sample=(bulkRows[0][c]||"").slice(0,14);
+      const label="列"+(c+1)+(sample?"："+sample:"");
+      [textSel,genderSel,idSel,nameSel].forEach(sel=>{
+        const opt=document.createElement("option");
+        opt.value=c; opt.textContent=label;
+        sel.appendChild(opt);
+      });
+    }
+    textSel.value=guessedTextCol;
+    genderSel.value=guessedGenderCol;
+    idSel.value=guessedIdCol;
+    nameSel.value=guessedNameCol;
+
+    const firstCellLen=(bulkRows[0][guessedTextCol]||"").length;
+    $("bulkHasHeader").checked = firstCellLen>0 && firstCellLen<12;
+    renderBulkTable();
+  }
+
+  function renderBulkTable(){
+    const wrap=$("bulkPreviewWrap");
+    const colCount=Math.max(...bulkRows.map(r=>r.length));
+    const hasHeader=$("bulkHasHeader").checked;
+    let html='<table class="preview"><thead><tr>';
+    for(let c=0;c<colCount;c++) html+="<th>列"+(c+1)+"</th>";
+    html+="</tr></thead><tbody>";
+    bulkRows.slice(0,6).forEach((r,ri)=>{
+      if(hasHeader&&ri===0) return;
+      html+="<tr>";
+      for(let c=0;c<colCount;c++) html+="<td>"+escapeHtml((r[c]||"").slice(0,40))+"</td>";
+      html+="</tr>";
+    });
+    html+="</tbody></table>";
+    if(bulkRows.length>6) html+='<div class="hint" style="margin:0;">…ほか '+(bulkRows.length-6)+' 行</div>';
+    wrap.innerHTML=html;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  }
+
+  $("bulkPaste").addEventListener("input", e=>{
+    bulkRows=parseBulk(e.target.value);
+    renderBulkPreview();
+  });
+  $("bulkHasHeader").addEventListener("change", renderBulkTable);
+  $("bulkTextCol").addEventListener("change", renderBulkTable);
+
+  $("bulkAddBtn").addEventListener("click", ()=>{
+    if(bulkRows.length===0) return;
+    const textCol=parseInt($("bulkTextCol").value,10);
+    const genderCol=parseInt($("bulkGenderCol").value,10);
+    const idCol=parseInt($("bulkIdCol").value,10);
+    const nameCol=parseInt($("bulkNameCol").value,10);
+    const hasHeader=$("bulkHasHeader").checked;
+    let added=0;
+    bulkRows.forEach((r,ri)=>{
+      if(hasHeader&&ri===0) return;
+      const text=(r[textCol]||"").trim();
+      if(!text) return;
+      const gender=genderCol>=0?(guessGender(r[genderCol])||"female"):"female";
+      const sid=idCol>=0?(r[idCol]||"").trim():"";
+      const sname=nameCol>=0?(r[nameCol]||"").trim():"";
+      addItem(text,gender,sid,sname);
+      added++;
+    });
+    toast(added+"件追加しました");
+    $("bulkPaste").value=""; bulkRows=[];
+    $("bulkConfig").style.display="none";
+  });
+
+  /* ---------- single add ---------- */
+  $("singleAddBtn").addEventListener("click", ()=>{
+    const text=$("singleText").value.trim();
+    if(!text){ toast("本文を入力してください"); return; }
+    const gender=$("singleGender").value;
+    const sid=$("singleStudentId").value.trim();
+    const sname=$("singleStudentName").value.trim();
+    addItem(text,gender,sid,sname);
+    $("singleText").value="";
+    $("singleStudentId").value="";
+    $("singleStudentName").value="";
+    toast("追加しました");
+  });
+
+  /* ---------- item model ---------- */
+  function addItem(text,gender,studentId,studentName){
+    const idx=items.length+1;
+    const item={
+      id:nextId++,
+      studentId:studentId||"",
+      studentName:studentName||("entry_"+String(idx).padStart(3,"0")),
+      text:text,
+      gender:gender||"female",
+      genderGuessed:!!gender,
+      status:"idle",
+      progressText:"",
+      error:null,
+      isQuotaError:false,
+      wavBlob:null,wavUrl:null,
+      m4aBlob:null,m4aUrl:null,
+      el:null
+    };
+    items.push(item);
+    renderAll();
+    return item;
+  }
+
+  function removeItem(id){
+    items=items.filter(it=>it.id!==id);
+    renderAll();
+  }
+
+  /* ---------- render ---------- */
+  function renderAll(){
+    itemCountEl.textContent=items.length+"件";
+    emptyStateEl.style.display=items.length===0?"block":"none";
+    Array.from(itemListEl.children).forEach(child=>{
+      const id=parseInt(child.dataset.id,10);
+      if(!items.find(it=>it.id===id)) child.remove();
+    });
+    items.forEach(item=>{
+      if(!item.el){ item.el=buildItemCard(item); itemListEl.appendChild(item.el); }
+      updateItemCard(item);
+    });
+  }
+
+  function buildItemCard(item){
+    const card=document.createElement("div");
+    card.className="item"; card.dataset.id=item.id;
+    card.innerHTML=
+      '<div class="item-head">'+
+        '<input type="text" class="fi-id" placeholder="生徒ID" value="'+escapeHtml(item.studentId)+'" title="生徒ID">'+
+        '<input type="text" class="fi-name" placeholder="生徒名" value="'+escapeHtml(item.studentName)+'" title="生徒名">'+
+        '<select class="gender">'+
+          '<option value="female">女性（Aoede）</option>'+
+          '<option value="male">男性（Charon）</option>'+
+        '</select>'+
+        '<span class="badge warn guessWarn" style="display:none;">性別要確認</span>'+
+        '<span class="filename-preview fprev"></span>'+
+        '<span class="status idle" style="flex-shrink:0;">待機中</span>'+
+        '<button class="ghost small removeBtn" type="button">削除</button>'+
+      '</div>'+
+      '<textarea class="body"></textarea>'+
+      '<div class="charcount"></div>'+
+      '<div class="item-actions">'+
+        '<button class="primary genBtn" type="button">音声化する</button>'+
+        '<span class="progress-text"></span>'+
+      '</div>'+
+      '<div class="error-text" style="display:none;"></div>'+
+      '<div class="audio-area">'+
+        '<audio controls></audio>'+
+        '<div class="dl-row">'+
+          '<button class="small ghost dlWav" type="button">WAVをダウンロード</button>'+
+          '<button class="small ghost dlM4a" type="button" style="display:none;">M4Aをダウンロード</button>'+
+          '<span class="fallback-note" style="display:none;">このブラウザはM4A自動変換に対応していません。WAVを<a href="'+CONVERTER_URL+'" target="_blank" rel="noopener">変換サイト</a>にアップロードしてください。</span>'+
+        '</div>'+
+      '</div>';
+
+    card.querySelector(".fi-id").addEventListener("input",e=>{ item.studentId=e.target.value; updateFilenamePreview(item); });
+    card.querySelector(".fi-name").addEventListener("input",e=>{ item.studentName=e.target.value; updateFilenamePreview(item); });
+    card.querySelector(".gender").addEventListener("change",e=>{
+      item.gender=e.target.value; item.genderGuessed=true;
+      card.querySelector(".guessWarn").style.display="none";
+    });
+    card.querySelector(".body").addEventListener("input",e=>{ item.text=e.target.value; updateCharCount(item); });
+    card.querySelector(".removeBtn").addEventListener("click",()=>removeItem(item.id));
+    card.querySelector(".genBtn").addEventListener("click",()=>generateAudioForItem(item));
+    card.querySelector(".dlWav").addEventListener("click",()=>{ if(item.wavBlob) downloadBlob(item.wavBlob,itemFilename(item)+".wav"); });
+    card.querySelector(".dlM4a").addEventListener("click",()=>{ if(item.m4aBlob) downloadBlob(item.m4aBlob,itemFilename(item)+".m4a"); });
+    return card;
+  }
+
+  function updateCharCount(item){
+    item.el.querySelector(".charcount").textContent=item.text.length+" 文字";
+  }
+  function updateFilenamePreview(item){
+    const el=item.el.querySelector(".fprev");
+    if(el) el.textContent="→ "+itemFilename(item);
+  }
+
+  function updateItemCard(item){
+    const card=item.el;
+    if(card.querySelector(".fi-id").value!==item.studentId) card.querySelector(".fi-id").value=item.studentId;
+    if(card.querySelector(".fi-name").value!==item.studentName) card.querySelector(".fi-name").value=item.studentName;
+    updateFilenamePreview(item);
+    const bodyEl=card.querySelector(".body");
+    if(document.activeElement!==bodyEl) bodyEl.value=item.text;
+    updateCharCount(item);
+    card.querySelector(".gender").value=item.gender;
+    card.querySelector(".guessWarn").style.display=(!item.genderGuessed)?"inline-block":"none";
+
+    const statusEl=card.querySelector(".status");
+    statusEl.className="status "+item.status;
+    statusEl.textContent={idle:"待機中",processing:"生成中",converting:"変換中",done:"完了",error:"エラー"}[item.status]||item.status;
+
+    card.querySelector(".progress-text").textContent=item.progressText||"";
+    const genBtn=card.querySelector(".genBtn");
+    genBtn.disabled=(item.status==="processing"||item.status==="converting");
+    genBtn.textContent=item.status==="done"?"再生成する":"音声化する";
+
+    const errEl=card.querySelector(".error-text");
+    if(item.error){
+      errEl.style.display="block";
+      errEl.textContent=item.error;
+      errEl.className="error-text"+(item.isQuotaError?" quota":"");
+    } else {
+      errEl.style.display="none";
+    }
+
+    const audioArea=card.querySelector(".audio-area");
+    const audioEl=card.querySelector("audio");
+    if(item.wavUrl){
+      audioArea.classList.add("show");
+      const preferredUrl=item.m4aUrl||item.wavUrl;
+      if(audioEl.src!==preferredUrl) audioEl.src=preferredUrl;
+    } else {
+      audioArea.classList.remove("show");
+    }
+    card.querySelector(".dlWav").style.display=item.wavBlob?"inline-block":"none";
+    card.querySelector(".dlM4a").style.display=item.m4aBlob?"inline-block":"none";
+    card.querySelector(".fallback-note").style.display=(item.wavBlob&&!item.m4aBlob&&item.status==="done")?"inline":"none";
+  }
+
+  /* ---------- audio helpers ---------- */
+  function base64ToBytes(b64){
+    const bin=atob(b64), bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function concatBytes(arrays){
+    const total=arrays.reduce((s,a)=>s+a.length,0);
+    const result=new Uint8Array(total);
+    let offset=0;
+    arrays.forEach(a=>{ result.set(a,offset); offset+=a.length; });
+    return result;
+  }
+
+  function pcmToWav(pcmBytes,sampleRate,numChannels,bitsPerSample){
+    const byteRate=sampleRate*numChannels*bitsPerSample/8;
+    const blockAlign=numChannels*bitsPerSample/8;
+    const dataSize=pcmBytes.length;
+    const buf=new ArrayBuffer(44+dataSize);
+    const v=new DataView(buf);
+    const ws=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+    ws(0,"RIFF"); v.setUint32(4,36+dataSize,true); ws(8,"WAVE");
+    ws(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true);
+    v.setUint16(22,numChannels,true); v.setUint32(24,sampleRate,true);
+    v.setUint32(28,byteRate,true); v.setUint16(32,blockAlign,true);
+    v.setUint16(34,bitsPerSample,true); ws(36,"data"); v.setUint32(40,dataSize,true);
+    new Uint8Array(buf,44).set(pcmBytes);
+    return new Blob([buf],{type:"audio/wav"});
+  }
+
+  function chunkText(text,maxChars){
+    const parts=text.split(/(?<=[。！？\n])/).filter(s=>s.trim().length>0);
+    const chunks=[]; let current="";
+    parts.forEach(s=>{
+      if(current.length>0&&(current.length+s.length)>maxChars){ chunks.push(current); current=s; }
+      else current+=s;
+    });
+    if(current.trim().length>0) chunks.push(current);
+    if(chunks.length===0) chunks.push(text);
+    return chunks;
+  }
+
+  function buildPrompt(chunk){
+    return $("tplScene").value+"\n\n"+$("tplContext").value+"\n\n"+$("tplInstr").value+"\n\n【本文】\n"+chunk;
+  }
+
+  /* ---------- ③ Gemini API call with quota detection ---------- */
+  async function callGeminiTTS(promptText,voiceName,apiKey){
+    const url="https://generativelanguage.googleapis.com/v1beta/models/"+MODEL+":generateContent";
+    const resp=await fetch(url,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+        contents:[{parts:[{text:promptText}]}],
+        generationConfig:{
+          responseModalities:["AUDIO"],
+          speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voiceName}}}
+        }
+      })
+    });
+    if(!resp.ok){
+      let detail="";
+      try{ detail=(await resp.text()).slice(0,500); }catch(e){}
+      const lc=detail.toLowerCase();
+      const isQuota=resp.status===429||lc.indexOf("resource_exhausted")!==-1||lc.indexOf("quota")!==-1||lc.indexOf("rate_limit")!==-1;
+      const err=new Error(isQuota
+        ? "⚠ このAPIキーの1日の利用上限に達しました（HTTP "+resp.status+"）。別のAPIキーに切り替えて再試行してください。"
+        : "APIエラー ("+resp.status+") "+detail);
+      err.isQuotaError=isQuota;
+      throw err;
+    }
+    const data=await resp.json();
+    const part=data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0];
+    const inline=part&&part.inlineData;
+    if(!inline||!inline.data) throw new Error("音声データが返されませんでした。本文の内容を確認してください。");
+    let sampleRate=24000;
+    const m=(inline.mimeType||"").match(/rate=(\d+)/);
+    if(m) sampleRate=parseInt(m[1],10);
+    return{bytes:base64ToBytes(inline.data),sampleRate:sampleRate};
+  }
+
+  async function tryConvertWavToM4a(wavBlob){
+    try{
+      if(typeof MediaRecorder==="undefined") return null;
+      const candidates=["audio/mp4;codecs=mp4a.40.2","audio/mp4"];
+      const supported=candidates.find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t));
+      if(!supported) return null;
+      const arrayBuffer=await wavBlob.arrayBuffer();
+      const AudioCtx=window.AudioContext||window.webkitAudioContext;
+      const ctx=new AudioCtx();
+      let audioBuffer;
+      try{ audioBuffer=await ctx.decodeAudioData(arrayBuffer.slice(0)); }
+      catch(e){ ctx.close(); return null; }
+      const dest=ctx.createMediaStreamDestination();
+      const source=ctx.createBufferSource();
+      source.buffer=audioBuffer; source.connect(dest);
+      return await new Promise(resolve=>{
+        let resolved=false;
+        const recorder=new MediaRecorder(dest.stream,{mimeType:supported});
+        const chunks=[];
+        recorder.ondataavailable=e=>{ if(e.data&&e.data.size>0) chunks.push(e.data); };
+        recorder.onstop=()=>{
+          if(resolved) return; resolved=true;
+          try{ctx.close();}catch(e){}
+          resolve(chunks.length?new Blob(chunks,{type:supported}):null);
+        };
+        recorder.onerror=()=>{ if(resolved) return; resolved=true; try{ctx.close();}catch(e){} resolve(null); };
+        recorder.start(); source.start();
+        const safety=setTimeout(()=>{ if(recorder.state!=="inactive") recorder.stop(); },Math.ceil(audioBuffer.duration*1000)+1200);
+        source.onended=()=>{ clearTimeout(safety); setTimeout(()=>{ if(recorder.state!=="inactive") recorder.stop(); },250); };
+      });
+    }catch(e){ return null; }
+  }
+
+  function downloadBlob(blob,filename){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url; a.download=filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+  }
+
+  /* ---------- generation pipeline ---------- */
+  // 戻り値: true=成功/失敗(続行可), "quota"=上限超過(一括停止)
+  async function generateAudioForItem(item){
+    const apiKey=apiKeyInput.value.trim();
+    if(!apiKey){ toast("APIキーを入力してください"); return true; }
+    if(!item.text.trim()){ toast("本文が空です"); return true; }
+
+    item.status="processing"; item.error=null; item.isQuotaError=false; item.progressText="";
+    updateItemCard(item);
+
+    try{
+      const voiceName=item.gender==="male"?"Charon":"Aoede";
+      const chunkSizeRaw=parseInt($("chunkSize").value,10);
+      const maxChars=(chunkSizeRaw===0)?Infinity:(chunkSizeRaw||1000);
+      const chunks=chunkText(item.text,maxChars);
+      const byteChunks=[]; let sampleRate=24000;
+
+      for(let i=0;i<chunks.length;i++){
+        item.progressText=chunks.length>1?("音声生成中 ("+(i+1)+"/"+chunks.length+")"):"音声生成中…";
+        updateItemCard(item);
+        const result=await callGeminiTTS(buildPrompt(chunks[i]),voiceName,apiKey);
+        byteChunks.push(result.bytes); sampleRate=result.sampleRate;
+      }
+
+      const pcm=concatBytes(byteChunks);
+      const wavBlob=pcmToWav(pcm,sampleRate,1,16);
+      item.wavBlob=wavBlob;
+      if(item.wavUrl) URL.revokeObjectURL(item.wavUrl);
+      item.wavUrl=URL.createObjectURL(wavBlob);
+
+      item.status="converting"; item.progressText="M4Aへ変換中…（音声の長さ分お待ちください）";
+      updateItemCard(item);
+
+      const m4a=await tryConvertWavToM4a(wavBlob);
+      if(m4a){
+        item.m4aBlob=m4a;
+        if(item.m4aUrl) URL.revokeObjectURL(item.m4aUrl);
+        item.m4aUrl=URL.createObjectURL(m4a);
+      } else {
+        item.m4aBlob=null; item.m4aUrl=null;
+      }
+
+      item.status="done"; item.progressText="";
+      updateItemCard(item);
+      return true;
+
+    }catch(err){
+      item.status="error";
+      item.isQuotaError=!!(err&&err.isQuotaError);
+      item.error=(err&&err.message)?err.message:String(err);
+      item.progressText="";
+      updateItemCard(item);
+      if(item.isQuotaError){ showQuotaBanner(); return "quota"; }
+      return true;
+    }
+  }
+
+  $("generateAllBtn").addEventListener("click", async ()=>{
+    if(items.length===0){ toast("追加された体験記がありません"); return; }
+    const apiKey=apiKeyInput.value.trim();
+    if(!apiKey){ toast("APIキーを入力してください"); return; }
+
+    const btn=$("generateAllBtn");
+    btn.disabled=true;
+    // done以外 + エラーも再試行対象
+    const targets=items.filter(it=>it.status!=="done");
+    if(targets.length===0){
+      // 全件完了済み → 全件再生成モード
+      targets.push(...items);
+    }
+    let done=0, stoppedByQuota=false;
+    batchProgressEl.style.width="0%";
+    for(const item of targets){
+      const result=await generateAudioForItem(item);
+      done++;
+      batchProgressEl.style.width=Math.round((done/targets.length)*100)+"%";
+      if(result==="quota"){ stoppedByQuota=true; break; }
+    }
+    btn.disabled=false;
+    if(stoppedByQuota){
+      toast("APIキーの上限に達しました。別のキーに切り替えて再試行してください。");
+    } else {
+      toast("全件の処理が完了しました");
+    }
+    setTimeout(()=>{ batchProgressEl.style.width="0%"; },1800);
+  });
+
+  /* ---------- zip download ---------- */
+  $("downloadAllBtn").addEventListener("click", async ()=>{
+    const ready=items.filter(it=>it.wavBlob);
+    if(ready.length===0){ toast("ダウンロードできる音声がありません"); return; }
+    if(typeof JSZip==="undefined"){ toast("ZIPライブラリの読み込みに失敗しました"); return; }
+    const zip=new JSZip();
+    ready.forEach(it=>{
+      const fn=itemFilename(it);
+      if(it.m4aBlob) zip.file(fn+".m4a",it.m4aBlob);
+      else zip.file(fn+".wav",it.wavBlob);
+    });
+    toast("ZIPを作成しています…");
+    const blob=await zip.generateAsync({type:"blob"});
+    downloadBlob(blob,"voices.zip");
+  });
+
+  renderAll();
+})();
+</script>
+
+</body>
+</html>
