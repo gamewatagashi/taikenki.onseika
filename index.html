@@ -227,7 +227,7 @@
     <div class="qb-head">⚠ APIキーの1日の利用上限に達しました</div>
     <div class="qb-body">
       別のAPIキーをお持ちの場合は、上のAPIキー欄に貼り替えてから、エラーになった体験記を個別に「再生成する」ボタンで再試行してください。<br>
-      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。
+      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。APIキーの設定の仕方はSlackの動画を見てください。
     </div>
     <div class="qb-actions">
       <button class="primary small" id="quotaBannerFocus" type="button">APIキー欄へ移動</button>
@@ -386,10 +386,10 @@
   const DEFAULT_INSTR =
 "【話し方の指定】\n" +
 "・Speaker1とSpeaker2とSpeaker3とSpeaker4とSpeaker5とSpeaker6とSpeaker7とSpeaker8とSpeaker9とSpeaker10、すべてのSpeakerの声質が変わらないように全て一定のトーンを保ってください。\n" +
-"・「東進」のイントネーションは下がる\n" +
+"・「東進」のイントネーションに関して、「『とう』は上がり、『しん』は下がる」\n" +
 "・ハキハキとした聞き取りやすい声で朗読してください。\n" +
 "・絶対にボソボソとしたつぶやき声や、ささやき声にしないでください。\n" +
-"・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
+"・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、音声のボリュームも800字を超えても一定で、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
 
   const CONVERTER_URL = "https://bright-tiramisu-ac6630.netlify.app/";
   const MODEL = "gemini-3.1-flash-tts-preview";
