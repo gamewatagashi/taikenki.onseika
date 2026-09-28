@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>体験記 音声化ツール ver.3</title>
+<title>体験記 音声化ツール ver.2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   /* ===== ロック画面用スタイル ===== */
@@ -205,45 +205,29 @@
     <div>
       <div class="eyebrow">Batch Voice Studio</div>
       <h1>体験記 音声化バッチツール</h1>
-      <p>Google Gemini TTS で体験記をまとめて読み上げ → WAV / M4A を書き出します。</p>
+      <p>Gemini 3.1 Flash TTS で体験記をまとめて読み上げ → WAV / M4A を書き出します。</p>
     </div>
   </div>
 
-  <!-- API / MODEL SETTINGS -->
+  <!-- API KEY -->
   <div class="panel">
-    <div class="panel-title">Gemini TTS設定 <span class="tag">必須</span></div>
-    <div class="row">
+    <div class="panel-title">APIキー <span class="tag">必須</span></div>
+    <div class="key-row">
       <div>
-        <label for="modelSelect">TTSモデル</label>
-        <select id="modelSelect">
-          <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS（高品質）</option>
-          <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS（大量処理向け）</option>
-          <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS Preview（旧モデル）</option>
-          <option value="custom">その他（モデルIDを入力）</option>
-        </select>
+        <label for="apiKey">Gemini APIキー</label>
+        <input type="password" id="apiKey" placeholder="AIza...">
       </div>
-      <div id="customModelWrap" style="display:none;">
-        <label for="customModel">モデルID</label>
-        <input type="text" id="customModel" placeholder="例：gemini-4.x-flash-tts">
-      </div>
+      <button class="ghost small" id="toggleKeyBtn" type="button">表示</button>
     </div>
-    <div class="hint">将来Googleから新しいTTSモデルが出た場合も、モデルIDを入力して切り替えできます。</div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-title">Google Project / APIキー <span class="tag">複数登録可</span></div>
-    <div class="hint">ProjectごとにAPIキーを登録してください。レート制限（HTTP 429）が発生したProjectだけ自動で次のProjectへ切り替えます。</div>
-    <div id="projectList"></div>
-    <button class="ghost small" id="addProjectBtn" type="button">＋ Projectを追加</button>
-    <div id="projectStatus" class="key-note" style="margin-top:10px;"></div>
+    <div class="key-note">このブラウザ内のみで保持。Google の Generative Language API に直接送信されます。サーバーには保存されません。</div>
   </div>
 
   <!-- QUOTA BANNER（上限超過時に表示） -->
   <div class="quota-banner" id="quotaBanner">
     <div class="qb-head">⚠ APIキーの1日の利用上限に達しました</div>
     <div class="qb-body">
-      HTTP 429（レート制限）が発生したProjectは自動的に停止し、次のProjectへ切り替えます。<br>
-      すべてのProjectが429になった場合は処理を停止します。Projectを追加して「すべて音声化」を押すと、未完了の件から再開できます。
+      別のAPIキーをお持ちの場合は、上のAPIキー欄に貼り替えてから、エラーになった体験記を個別に「再生成する」ボタンで再試行してください。<br>
+      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。APIキーの設定の仕方はSlackの動画を見てください。
     </div>
     <div class="qb-actions">
       <button class="primary small" id="quotaBannerFocus" type="button">APIキー欄へ移動</button>
@@ -286,13 +270,6 @@
     <div class="tabpane active" id="tab-bulk">
       <div class="hint">音声化対象一覧シートの行（生徒ID・生徒名・性別・本文を含む範囲）をそのままコピーして貼り付けてください。列は自動認識します。</div>
       <textarea id="bulkPaste" rows="5" placeholder="ここにスプレッドシートの行を貼り付け（Ctrl/Cmd+V）"></textarea>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-        <label style="margin:0;">またはファイルを読み込む：
-          <input type="file" id="bulkFile" accept=".csv,.tsv,.txt" style="width:auto;">
-        </label>
-        <button class="ghost small" id="bulkClearBtn" type="button">入力をクリア</button>
-      </div>
-      <div class="hint">Googleスプレッドシートは「ファイル → ダウンロード → CSV」またはコピー＆貼り付けで読み込めます。</div>
       <div id="bulkConfig" style="display:none; margin-top:12px;">
         <div class="row">
           <div>
@@ -419,8 +396,7 @@ const DEFAULT_INSTR =
 "・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、音声のボリュームも800字を超えても一定で、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
 
   const CONVERTER_URL = "https://bright-tiramisu-ac6630.netlify.app/";
-  const DEFAULT_MODEL = "gemini-3.8-flash-tts";
-  let projects = [];
+  const MODEL = "gemini-3.1-flash-tts-preview";
 
   /* ---------- state ---------- */
   // ② studentId / studentName でファイル名を構成
@@ -430,6 +406,7 @@ const DEFAULT_INSTR =
 
   /* ---------- dom ---------- */
   const $ = id => document.getElementById(id);
+  const apiKeyInput = $("apiKey");
   const itemListEl = $("itemList");
   const emptyStateEl = $("emptyState");
   const itemCountEl = $("itemCount");
@@ -456,9 +433,12 @@ const DEFAULT_INSTR =
   }
   $("quotaBannerClose").addEventListener("click", ()=> $("quotaBanner").classList.remove("show"));
   $("quotaBannerFocus").addEventListener("click", ()=>{
-    $("projectList").scrollIntoView({behavior:"smooth", block:"center"});
-    $("projectList").style.outline="2px solid var(--red)";
-    setTimeout(()=>{ $("projectList").style.outline=""; }, 2200);
+    apiKeyInput.focus();
+    apiKeyInput.scrollIntoView({behavior:"smooth", block:"center"});
+    const orig = apiKeyInput.style.borderColor;
+    apiKeyInput.style.borderColor = "var(--red)";
+    apiKeyInput.style.boxShadow = "0 0 0 3px rgba(255,107,107,0.25)";
+    setTimeout(()=>{ apiKeyInput.style.borderColor=orig; apiKeyInput.style.boxShadow=""; }, 2200);
   });
 
   /* ---------- hero meter ---------- */
@@ -480,52 +460,12 @@ const DEFAULT_INSTR =
     tick();
   })();
 
-  /* ---------- model / project pool ---------- */
-  function getSelectedModel(){
-    const select=$("modelSelect");
-    return select.value==="custom" ? $("customModel").value.trim() : select.value;
-  }
-  function renderProjects(){
-    const wrap=$("projectList"); wrap.innerHTML="";
-    projects.forEach((p,idx)=>{
-      const row=document.createElement("div");
-      row.className="key-row"; row.style.marginBottom="10px";
-      row.innerHTML='<div><label>Project名（表示用）</label><input type="text" class="projectName" placeholder="例：voice-project-1" value="'+escapeHtml(p.name)+'"></div>'+
-        '<div><label>APIキー</label><input type="password" class="projectKey" placeholder="AIza..." value="'+escapeHtml(p.apiKey)+'"></div>'+
-        '<button class="ghost small toggleProjectKey" type="button">表示</button>'+
-        '<button class="ghost small removeProject" type="button">削除</button>';
-      row.querySelector(".projectName").addEventListener("input",e=>p.name=e.target.value);
-      row.querySelector(".projectKey").addEventListener("input",e=>p.apiKey=e.target.value);
-      row.querySelector(".toggleProjectKey").addEventListener("click",()=>{
-        const el=row.querySelector(".projectKey"), pw=el.type==="password";
-        el.type=pw?"text":"password"; row.querySelector(".toggleProjectKey").textContent=pw?"隠す":"表示";
-      });
-      row.querySelector(".removeProject").addEventListener("click",()=>{projects.splice(idx,1);renderProjects();});
-      wrap.appendChild(row);
-    });
-    updateProjectStatus();
-  }
-  function updateProjectStatus(){
-    const usable=projects.filter(p=>p.apiKey.trim()&&!p.rateLimited);
-    const limited=projects.filter(p=>p.rateLimited);
-    $("projectStatus").textContent=usable.length+"件のProjectが利用可能"+
-      (limited.length?" ／ 今回429で停止中："+limited.map(p=>p.name||("Project "+(projects.indexOf(p)+1))).join("、"):"");
-  }
-  function resetProjectPool(){ projects.forEach(p=>{p.rateLimited=false;p.lastError="";}); updateProjectStatus(); }
-  function getUsableProject(){ return projects.find(p=>p.apiKey.trim()&&!p.rateLimited); }
-  function isRateLimitError(err){ return !!(err&&err.isRateLimitError); }
-  function markRateLimited(project,detail){ project.rateLimited=true; project.lastError=detail||"HTTP 429"; updateProjectStatus(); }
-  function switchToNextProject(current){ if(current) markRateLimited(current); return getUsableProject(); }
-
-  $("modelSelect").addEventListener("change",()=>{
-    $("customModelWrap").style.display=$("modelSelect").value==="custom"?"block":"none";
+  /* ---------- api key show/hide ---------- */
+  $("toggleKeyBtn").addEventListener("click", ()=>{
+    const isPw = apiKeyInput.type==="password";
+    apiKeyInput.type = isPw?"text":"password";
+    $("toggleKeyBtn").textContent = isPw?"隠す":"表示";
   });
-  $("addProjectBtn").addEventListener("click",()=>{
-    projects.push({name:"Project "+(projects.length+1),apiKey:"",rateLimited:false,lastError:""});
-    renderProjects();
-  });
-  projects.push({name:"Project 1",apiKey:"",rateLimited:false,lastError:""});
-  renderProjects();
 
   /* ---------- tabs ---------- */
   document.querySelectorAll(".tabbtn").forEach(btn=>{
@@ -651,14 +591,6 @@ const DEFAULT_INSTR =
   $("bulkPaste").addEventListener("input", e=>{
     bulkRows=parseBulk(e.target.value);
     renderBulkPreview();
-  });
-  $("bulkFile").addEventListener("change", async e=>{
-    const file=e.target.files&&e.target.files[0]; if(!file)return;
-    try{ const raw=await file.text(); $("bulkPaste").value=raw; bulkRows=parseBulk(raw); renderBulkPreview(); toast(file.name+"を読み込みました"); }
-    catch(err){ toast("ファイルを読み込めませんでした"); }
-  });
-  $("bulkClearBtn").addEventListener("click",()=>{
-    $("bulkPaste").value=""; $("bulkFile").value=""; bulkRows=[]; $("bulkConfig").style.display="none";
   });
   $("bulkHasHeader").addEventListener("change", renderBulkTable);
   $("bulkTextCol").addEventListener("change", renderBulkTable);
@@ -1076,23 +1008,39 @@ function normalizePronunciationText(text){
     ttsChunk;
 }
 
-  /* ---------- Gemini API call ---------- */
-  async function callGeminiTTS(promptText,voiceName,apiKey,model){
-    const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
-    const resp=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-      body:JSON.stringify({contents:[{parts:[{text:promptText}]}],generationConfig:{responseModalities:["AUDIO"],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voiceName}}}}})});
+  /* ---------- ③ Gemini API call with quota detection ---------- */
+  async function callGeminiTTS(promptText,voiceName,apiKey){
+    const url="https://generativelanguage.googleapis.com/v1beta/models/"+MODEL+":generateContent";
+    const resp=await fetch(url,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+        contents:[{parts:[{text:promptText}]}],
+        generationConfig:{
+          responseModalities:["AUDIO"],
+          speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voiceName}}}
+        }
+      })
+    });
     if(!resp.ok){
-      let detail=""; try{detail=(await resp.text()).slice(0,500);}catch(e){}
+      let detail="";
+      try{ detail=(await resp.text()).slice(0,500); }catch(e){}
       const lc=detail.toLowerCase();
-      const isRateLimit=resp.status===429 && (!detail||lc.includes("resource_exhausted")||lc.includes("rate_limit")||lc.includes("rate limit")||lc.includes("quota")||lc.includes("too many requests"));
-      const err=new Error(isRateLimit?"⚠ レート制限に達しました（HTTP 429）。次のProjectへ切り替えます。":"APIエラー ("+resp.status+") "+detail);
-      err.isRateLimitError=isRateLimit; throw err;
+      const isQuota=resp.status===429||lc.indexOf("resource_exhausted")!==-1||lc.indexOf("quota")!==-1||lc.indexOf("rate_limit")!==-1;
+      const err=new Error(isQuota
+        ? "⚠ このAPIキーの1日の利用上限に達しました（HTTP "+resp.status+"）。別のAPIキーに切り替えて再試行してください。"
+        : "APIエラー ("+resp.status+") "+detail);
+      err.isQuotaError=isQuota;
+      throw err;
     }
     const data=await resp.json();
-    const part=data?.candidates?.[0]?.content?.parts?.[0], inline=part?.inlineData;
-    if(!inline?.data) throw new Error("音声データが返されませんでした。本文の内容を確認してください。");
-    let sampleRate=24000; const m=(inline.mimeType||"").match(/rate=(\d+)/); if(m)sampleRate=parseInt(m[1],10);
-    return {bytes:base64ToBytes(inline.data),sampleRate};
+    const part=data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0];
+    const inline=part&&part.inlineData;
+    if(!inline||!inline.data) throw new Error("音声データが返されませんでした。本文の内容を確認してください。");
+    let sampleRate=24000;
+    const m=(inline.mimeType||"").match(/rate=(\d+)/);
+    if(m) sampleRate=parseInt(m[1],10);
+    return{bytes:base64ToBytes(inline.data),sampleRate:sampleRate};
   }
 
   async function tryConvertWavToM4a(wavBlob){
@@ -1137,67 +1085,90 @@ function normalizePronunciationText(text){
   }
 
   /* ---------- generation pipeline ---------- */
+  // 戻り値: true=成功/失敗(続行可), "quota"=上限超過(一括停止)
   async function generateAudioForItem(item){
-    if(!item.text.trim()){toast("本文が空です");return true;}
-    const model=getSelectedModel();
-    if(!model){toast("TTSモデルを選択してください");return true;}
-    item.status="processing"; item.error=null; item.isQuotaError=false; item.progressText=""; updateItemCard(item);
+    const apiKey=apiKeyInput.value.trim();
+    if(!apiKey){ toast("APIキーを入力してください"); return true; }
+    if(!item.text.trim()){ toast("本文が空です"); return true; }
+
+    item.status="processing"; item.error=null; item.isQuotaError=false; item.progressText="";
+    updateItemCard(item);
+
     try{
       const voiceName=item.gender==="male"?"Charon":"Aoede";
-      const raw=parseInt($("chunkSize").value,10);
-      const maxChars=raw===0?Infinity:(raw||1000);
-      const chunks=chunkText(item.text,maxChars), byteChunks=[]; let sampleRate=24000;
-      let project=getUsableProject();
-      if(!project)throw new Error("利用できるProject/APIキーがありません。");
+      const chunkSizeRaw=parseInt($("chunkSize").value,10);
+      const maxChars=(chunkSizeRaw===0)?Infinity:(chunkSizeRaw||1000);
+      const chunks=chunkText(item.text,maxChars);
+      const byteChunks=[]; let sampleRate=24000;
+
       for(let i=0;i<chunks.length;i++){
-        let attempts=0;
-        while(true){
-          if(!project)throw new Error("すべてのProjectがレート制限（HTTP 429）になりました。");
-          item.progressText=(chunks.length>1?("音声生成中 ("+(i+1)+"/"+chunks.length+")"):"音声生成中…")+" / "+(project.name||"Project");
-          updateItemCard(item);
-          try{
-            const result=await callGeminiTTS(buildPrompt(chunks[i]),voiceName,project.apiKey.trim(),model);
-            byteChunks.push(result.bytes); sampleRate=result.sampleRate; break;
-          }catch(err){
-            if(!isRateLimitError(err))throw err;
-            markRateLimited(project,err.message);
-            attempts++;
-            project=getUsableProject();
-            if(!project||attempts>=projects.length)throw new Error("すべてのProjectがレート制限（HTTP 429）になりました。");
-            toast("429を検知：次のProjectへ切り替えました");
-          }
-        }
+        item.progressText=chunks.length>1?("音声生成中 ("+(i+1)+"/"+chunks.length+")"):"音声生成中…";
+        updateItemCard(item);
+        const result=await callGeminiTTS(buildPrompt(chunks[i]),voiceName,apiKey);
+        byteChunks.push(result.bytes); sampleRate=result.sampleRate;
       }
-      const wavBlob=pcmToWav(concatBytes(byteChunks),sampleRate,1,16);
-      item.wavBlob=wavBlob; if(item.wavUrl)URL.revokeObjectURL(item.wavUrl); item.wavUrl=URL.createObjectURL(wavBlob);
-      item.status="converting"; item.progressText="M4Aへ変換中…（音声の長さ分お待ちください）"; updateItemCard(item);
+
+      const pcm=concatBytes(byteChunks);
+      const wavBlob=pcmToWav(pcm,sampleRate,1,16);
+      item.wavBlob=wavBlob;
+      if(item.wavUrl) URL.revokeObjectURL(item.wavUrl);
+      item.wavUrl=URL.createObjectURL(wavBlob);
+
+      item.status="converting"; item.progressText="M4Aへ変換中…（音声の長さ分お待ちください）";
+      updateItemCard(item);
+
       const m4a=await tryConvertWavToM4a(wavBlob);
-      if(m4a){item.m4aBlob=m4a;if(item.m4aUrl)URL.revokeObjectURL(item.m4aUrl);item.m4aUrl=URL.createObjectURL(m4a);}
-      else{item.m4aBlob=null;item.m4aUrl=null;}
-      item.status="done";item.progressText="";updateItemCard(item);return true;
+      if(m4a){
+        item.m4aBlob=m4a;
+        if(item.m4aUrl) URL.revokeObjectURL(item.m4aUrl);
+        item.m4aUrl=URL.createObjectURL(m4a);
+      } else {
+        item.m4aBlob=null; item.m4aUrl=null;
+      }
+
+      item.status="done"; item.progressText="";
+      updateItemCard(item);
+      return true;
+
     }catch(err){
-      item.status="error";item.isQuotaError=isRateLimitError(err);item.error=err?.message||String(err);item.progressText="";updateItemCard(item);
-      if(item.isQuotaError)showQuotaBanner(); return true;
+      item.status="error";
+      item.isQuotaError=!!(err&&err.isQuotaError);
+      item.error=(err&&err.message)?err.message:String(err);
+      item.progressText="";
+      updateItemCard(item);
+      if(item.isQuotaError){ showQuotaBanner(); return "quota"; }
+      return true;
     }
   }
 
-  $("generateAllBtn").addEventListener("click",async()=>{
-    if(items.length===0){toast("追加された体験記がありません");return;}
-    if(!getSelectedModel()){toast("TTSモデルを選択してください");return;}
-    if(!projects.some(p=>p.apiKey.trim())){toast("Project/APIキーを1件以上登録してください");return;}
-    resetProjectPool(); $("quotaBanner").classList.remove("show");
-    const btn=$("generateAllBtn");btn.disabled=true;
-    const targets=items.filter(it=>it.status!=="done"); if(targets.length===0)targets.push(...items);
-    let done=0; batchProgressEl.style.width="0%";
+  $("generateAllBtn").addEventListener("click", async ()=>{
+    if(items.length===0){ toast("追加された体験記がありません"); return; }
+    const apiKey=apiKeyInput.value.trim();
+    if(!apiKey){ toast("APIキーを入力してください"); return; }
+
+    const btn=$("generateAllBtn");
+    btn.disabled=true;
+    // done以外 + エラーも再試行対象
+    const targets=items.filter(it=>it.status!=="done");
+    if(targets.length===0){
+      // 全件完了済み → 全件再生成モード
+      targets.push(...items);
+    }
+    let done=0, stoppedByQuota=false;
+    batchProgressEl.style.width="0%";
     for(const item of targets){
-      await generateAudioForItem(item); done++;
-      batchProgressEl.style.width=Math.round(done/targets.length*100)+"%";
-      if(!getUsableProject()&&done<targets.length){showQuotaBanner();break;}
+      const result=await generateAudioForItem(item);
+      done++;
+      batchProgressEl.style.width=Math.round((done/targets.length)*100)+"%";
+      if(result==="quota"){ stoppedByQuota=true; break; }
     }
     btn.disabled=false;
-    const remaining=targets.filter(it=>it.status!=="done").length;
-    toast(remaining>0?"Projectのレート制限で一旦停止しました。Projectを追加して再実行してください。":"全件の処理が完了しました");
-    setTimeout(()=>batchProgressEl.style.width="0%",1800);
+    if(stoppedByQuota){
+      toast("APIキーの上限に達しました。別のキーに切り替えて再試行してください。");
+    } else {
+      toast("全件の処理が完了しました");
+    }
+    setTimeout(()=>{ batchProgressEl.style.width="0%"; },1800);
   });
 
   /* ---------- zip download ---------- */
