@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>体験記 音声化ツール ver.2</title>
+<title>体験記 音声化バッチツール</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   /* ===== ロック画面用スタイル ===== */
@@ -117,6 +117,22 @@
   .key-row>div{flex:1;}
   .key-note{font-size:11.5px;color:var(--text-faint);margin-top:6px;}
 
+
+  /* ---- model / project pool ---- */
+  .model-grid{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:12px;}
+  .project-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .project-row{display:grid;grid-template-columns:150px minmax(0,1fr) auto auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--border-soft);border-radius:8px;background:var(--bg);}
+  .project-row .project-status{font-family:var(--mono);font-size:10.5px;color:var(--text-faint);padding-bottom:9px;white-space:nowrap;}
+  .project-row.rate-limited{border-color:var(--red);background:var(--red-bg);}
+  .pool-status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-dim);}
+  .pool-status strong{color:var(--text);}
+  .switch-note{font-size:11.5px;color:var(--text-faint);margin-top:7px;}
+  .file-import{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+  @media(max-width:680px){
+    .model-grid{grid-template-columns:1fr;}
+    .project-row{grid-template-columns:1fr;}
+  }
+
   /* ---- quota banner ---- */
   .quota-banner{border:1px solid var(--red);background:var(--red-bg);border-radius:10px;padding:16px 20px;margin-bottom:16px;display:none;}
   .quota-banner.show{display:block;}
@@ -205,21 +221,43 @@
     <div>
       <div class="eyebrow">Batch Voice Studio</div>
       <h1>体験記 音声化バッチツール</h1>
-      <p>Gemini 3.1 Flash TTS で体験記をまとめて読み上げ → WAV / M4A を書き出します。</p>
+      <p>Google Gemini TTSで体験記をまとめて読み上げ → WAV / M4A を書き出します。モデルとProjectを切り替え可能。</p>
     </div>
   </div>
 
-  <!-- API KEY -->
+  <!-- MODEL / API PROJECT POOL -->
   <div class="panel">
-    <div class="panel-title">APIキー <span class="tag">必須</span></div>
-    <div class="key-row">
+    <div class="panel-title">音声モデル <span class="tag">差し替え可能</span></div>
+    <div class="model-grid">
       <div>
-        <label for="apiKey">Gemini APIキー</label>
-        <input type="password" id="apiKey" placeholder="AIza...">
+        <label for="modelSelect">モデル</label>
+        <select id="modelSelect">
+          <option value="gemini-3.8-flash-tts">Gemini 3.8 Flash TTS</option>
+          <option value="gemini-3.8-flash-lite-tts">Gemini 3.8 Flash-Lite TTS</option>
+          <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS Preview（旧）</option>
+          <option value="__custom__">その他（モデルIDを入力）</option>
+        </select>
       </div>
-      <button class="ghost small" id="toggleKeyBtn" type="button">表示</button>
+      <div id="customModelWrap" style="display:none;">
+        <label for="customModel">モデルID</label>
+        <input type="text" id="customModel" placeholder="例：gemini-4.x-flash-tts">
+      </div>
     </div>
-    <div class="key-note">このブラウザ内のみで保持。Google の Generative Language API に直接送信されます。サーバーには保存されません。</div>
+    <div class="key-note">GoogleのTTSモデルは同じAPI形式で切り替えられるため、将来の新しいGoogle TTSもモデルIDを変更して利用できます。</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Google Project / API Key <span class="tag">複数登録可</span></div>
+    <div class="hint">APIキーは各Google Cloud / AI Studio Projectごとに登録してください。レート制限が発生したProjectだけを一時的に停止し、次のProjectへ切り替えます。</div>
+    <div id="projectList" class="project-list"></div>
+    <div style="margin-top:10px;">
+      <button class="ghost small" id="addProjectBtn" type="button">＋ Project / API Keyを追加</button>
+    </div>
+    <div class="pool-status">
+      <span>現在使用中：<strong id="currentProjectLabel">Project 1</strong></span>
+      <span>状態：<strong id="currentProjectState">待機中</strong></span>
+    </div>
+    <div class="switch-note">切替対象はレート制限系のHTTP 429のみです。400 / 401 / 403 / 500 / 503などでは別Projectへ自動切替しません。</div>
   </div>
 
   <!-- QUOTA BANNER（上限超過時に表示） -->
@@ -227,7 +265,7 @@
     <div class="qb-head">⚠ APIキーの1日の利用上限に達しました</div>
     <div class="qb-body">
       別のAPIキーをお持ちの場合は、上のAPIキー欄に貼り替えてから、エラーになった体験記を個別に「再生成する」ボタンで再試行してください。<br>
-      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。APIキーの設定の仕方はSlackの動画を見てください。
+      「すべて音声化」を再度押すと、まだ完了していない件もまとめて再処理されます。
     </div>
     <div class="qb-actions">
       <button class="primary small" id="quotaBannerFocus" type="button">APIキー欄へ移動</button>
@@ -251,8 +289,8 @@
       <div style="height:10px"></div>
       <div class="row">
         <div>
-          <label for="chunkSize">1ブロックあたりの最大文字数（長文の自動分割・0で分割なし＝無制限）</label>
-          <input type="text" id="chunkSize" value="1000">
+          <label for="chunkSize">1ブロックあたりの最大文字数（長文の自動分割）</label>
+          <input type="text" id="chunkSize" value="600">
         </div>
       </div>
     </details>
@@ -330,9 +368,9 @@
   <div class="panel">
     <div class="panel-title">音声化前のチェック <span class="tag">手動</span></div>
     <ul class="checklist">
-      <li>講師名・苗字は自動で指定の読みへ変換（生成前に本文を手動修正することも可能）</li>
+      <li>講師の名前はひらがなに変更（誤読防止）</li>
       <li>アルファベット表記はカナに変更（例：TEAP → ティープ）</li>
-      <li>「志作文」は自動で「こころざしさくぶん」として読み上げ、本文中の「（笑）」は音声化時には無視</li>
+      <li>「志作文」は「しさくぶん」に変更（「こころざしぶん」と誤読されるため）</li>
     </ul>
     <div class="hint" style="margin-top:8px;margin-bottom:0;">下の各カードの本文は直接編集できます。生成前に確認・修正してください。</div>
   </div>
@@ -383,20 +421,17 @@
   const DEFAULT_SCENE = "ハキハキとしたクリアな声質で一定の安定したナレーション。ボソボソ喋ったり、ささやき声にしたりしないでください。";
   const DEFAULT_CONTEXT = "Sample Context：高校生が大学受験の経験を振り返り、合格の喜びを高校生らしく語るナレーション。「東進」のイントネーションは下がる";
   // ① Speaker1〜Speaker10以上すべてに対して同一の声質を維持するよう明示
-const DEFAULT_INSTR =
+  const DEFAULT_INSTR =
 "【話し方の指定】\n" +
 "・Speaker1とSpeaker2とSpeaker3とSpeaker4とSpeaker5とSpeaker6とSpeaker7とSpeaker8とSpeaker9とSpeaker10、すべてのSpeakerの声質が変わらないように全て一定のトーンを保ってください。\n" +
-"・「東進」のイントネーションに関して、絶対に「『とう』は上がり、『しん』は下がる」\n" +
+"・「東進」のイントネーションは下がる\n" +
 "・ハキハキとした聞き取りやすい声で朗読してください。\n" +
 "・絶対にボソボソとしたつぶやき声や、ささやき声にしないでください。\n" +
-"・文と文の間に息を吸う音・吐く音・ブレス音を入れないでください。\n" +
-"・「ふー」「はー」などの吐息音を入れないでください。\n" +
-"・句点や改行のたびに不自然な呼吸の間を入れず、文章を滑らかにつないでください。\n" +
-"・「（笑）」などの注記は発声しないでください。\n" +
-"・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、音声のボリュームも800字を超えても一定で、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
+"・大げさな抑揚（声の浮き沈み）はつけず、訛りはなし、標準語で最初から最後まで声質は一定の落ち着いたペースを保って読んでください。違和感のないイントネーションでお願いします。";
 
   const CONVERTER_URL = "https://bright-tiramisu-ac6630.netlify.app/";
-  const MODEL = "gemini-3.1-flash-tts-preview";
+  const DEFAULT_MODEL = "gemini-3.8-flash-tts";
+  const LEGACY_MODEL = "gemini-3.1-flash-tts-preview";
 
   /* ---------- state ---------- */
   // ② studentId / studentName でファイル名を構成
@@ -404,9 +439,20 @@ const DEFAULT_INSTR =
   let nextId = 1;
   let bulkRows = [];
 
+  // Google Project / API Key pool
+  let projects = [
+    {id:1, name:"Project 1", apiKey:"", rateLimited:false, lastError:""}
+  ];
+  let currentProjectIndex = 0;
+  let batchPoolPrepared = false;
+
   /* ---------- dom ---------- */
   const $ = id => document.getElementById(id);
-  const apiKeyInput = $("apiKey");
+  const modelSelect = $("modelSelect");
+  const customModelInput = $("customModel");
+  const projectListEl = $("projectList");
+  const currentProjectLabelEl = $("currentProjectLabel");
+  const currentProjectStateEl = $("currentProjectState");
   const itemListEl = $("itemList");
   const emptyStateEl = $("emptyState");
   const itemCountEl = $("itemCount");
@@ -433,13 +479,124 @@ const DEFAULT_INSTR =
   }
   $("quotaBannerClose").addEventListener("click", ()=> $("quotaBanner").classList.remove("show"));
   $("quotaBannerFocus").addEventListener("click", ()=>{
-    apiKeyInput.focus();
-    apiKeyInput.scrollIntoView({behavior:"smooth", block:"center"});
-    const orig = apiKeyInput.style.borderColor;
-    apiKeyInput.style.borderColor = "var(--red)";
-    apiKeyInput.style.boxShadow = "0 0 0 3px rgba(255,107,107,0.25)";
-    setTimeout(()=>{ apiKeyInput.style.borderColor=orig; apiKeyInput.style.boxShadow=""; }, 2200);
+    const firstKey = document.querySelector(".project-key");
+    if(firstKey){
+      firstKey.focus();
+      firstKey.scrollIntoView({behavior:"smooth", block:"center"});
+      const orig = firstKey.style.borderColor;
+      firstKey.style.borderColor = "var(--red)";
+      firstKey.style.boxShadow = "0 0 0 3px rgba(255,107,107,0.25)";
+      setTimeout(()=>{ firstKey.style.borderColor=orig; firstKey.style.boxShadow=""; }, 2200);
+    }
   });
+
+
+  /* ---------- model / project pool ---------- */
+  function selectedModel(){
+    const value=modelSelect.value;
+    if(value==="__custom__"){
+      const custom=customModelInput.value.trim();
+      return custom || DEFAULT_MODEL;
+    }
+    return value;
+  }
+
+  function renderProjectPool(){
+    projectListEl.innerHTML="";
+    projects.forEach((project,index)=>{
+      const row=document.createElement("div");
+      row.className="project-row"+(project.rateLimited?" rate-limited":"");
+      row.innerHTML=
+        '<div><label>Project名</label><input type="text" class="project-name" value="'+escapeHtml(project.name)+'"></div>'+
+        '<div><label>API Key</label><input type="password" class="project-key" placeholder="AIza..." value="'+escapeHtml(project.apiKey)+'"></div>'+
+        '<button class="ghost small toggle-project-key" type="button">表示</button>'+
+        '<button class="ghost small remove-project" type="button">削除</button>'+
+        '<div class="project-status" style="grid-column:1/-1;">'+
+          (project.rateLimited?'⚠ レート制限：このバッチでは自動使用しません':(index===currentProjectIndex?'● 現在使用中':'待機中'))+
+          (project.lastError?' — '+escapeHtml(project.lastError):'')+
+        '</div>';
+
+      row.querySelector(".project-name").addEventListener("input",e=>{
+        project.name=e.target.value.trim()||("Project "+(index+1));
+        updatePoolStatus();
+      });
+      row.querySelector(".project-key").addEventListener("input",e=>{
+        project.apiKey=e.target.value.trim();
+      });
+      row.querySelector(".toggle-project-key").addEventListener("click",e=>{
+        const input=row.querySelector(".project-key");
+        const pw=input.type==="password";
+        input.type=pw?"text":"password";
+        e.target.textContent=pw?"隠す":"表示";
+      });
+      row.querySelector(".remove-project").addEventListener("click",()=>{
+        if(projects.length===1){ toast("Projectは最低1件必要です"); return; }
+        projects.splice(index,1);
+        if(currentProjectIndex>=projects.length) currentProjectIndex=projects.length-1;
+        renderProjectPool();
+        updatePoolStatus();
+      });
+      projectListEl.appendChild(row);
+    });
+    updatePoolStatus();
+  }
+
+  function updatePoolStatus(){
+    const p=projects[currentProjectIndex];
+    currentProjectLabelEl.textContent=p?p.name:"—";
+    currentProjectStateEl.textContent=p?(p.rateLimited?"レート制限中":"使用可能"):"—";
+  }
+
+  function addProject(){
+    const id=Date.now();
+    projects.push({id,name:"Project "+projects.length+1,apiKey:"",rateLimited:false,lastError:""});
+    renderProjectPool();
+    const rows=projectListEl.querySelectorAll(".project-row");
+    const last=rows[rows.length-1];
+    if(last) last.querySelector(".project-key").focus();
+  }
+
+  function resetProjectRateLimits(){
+    projects.forEach(p=>{p.rateLimited=false;p.lastError="";});
+    currentProjectIndex=0;
+    batchPoolPrepared=true;
+    renderProjectPool();
+  }
+
+  function getUsableProject(){
+    for(let offset=0;offset<projects.length;offset++){
+      const idx=(currentProjectIndex+offset)%projects.length;
+      const p=projects[idx];
+      if(p.apiKey && !p.rateLimited){
+        currentProjectIndex=idx;
+        updatePoolStatus();
+        return p;
+      }
+    }
+    return null;
+  }
+
+  function switchToNextProject(){
+    const oldIndex=currentProjectIndex;
+    if(projects[oldIndex]) projects[oldIndex].rateLimited=true;
+    for(let offset=1;offset<=projects.length;offset++){
+      const idx=(oldIndex+offset)%projects.length;
+      if(projects[idx] && projects[idx].apiKey && !projects[idx].rateLimited){
+        currentProjectIndex=idx;
+        renderProjectPool();
+        toast(projects[oldIndex]?.name+" はレート制限。"+projects[idx].name+"へ切替");
+        return projects[idx];
+      }
+    }
+    renderProjectPool();
+    return null;
+  }
+
+  modelSelect.addEventListener("change",()=>{
+    customModelInput.parentElement.style.display=modelSelect.value==="__custom__"?"block":"none";
+  });
+  $("addProjectBtn").addEventListener("click",addProject);
+  renderProjectPool();
 
   /* ---------- hero meter ---------- */
   (function(){
@@ -459,13 +616,6 @@ const DEFAULT_INSTR =
     }
     tick();
   })();
-
-  /* ---------- api key show/hide ---------- */
-  $("toggleKeyBtn").addEventListener("click", ()=>{
-    const isPw = apiKeyInput.type==="password";
-    apiKeyInput.type = isPw?"text":"password";
-    $("toggleKeyBtn").textContent = isPw?"隠す":"表示";
-  });
 
   /* ---------- tabs ---------- */
   document.querySelectorAll(".tabbtn").forEach(btn=>{
@@ -591,6 +741,25 @@ const DEFAULT_INSTR =
   $("bulkPaste").addEventListener("input", e=>{
     bulkRows=parseBulk(e.target.value);
     renderBulkPreview();
+  });
+  $("sheetFile").addEventListener("change", async e=>{
+    const file=e.target.files&&e.target.files[0];
+    if(!file) return;
+    try{
+      const text=await file.text();
+      $("bulkPaste").value=text;
+      bulkRows=parseBulk(text);
+      renderBulkPreview();
+      toast(file.name+" を読み込みました");
+    }catch(err){
+      toast("ファイルを読み込めませんでした");
+    }
+  });
+  $("clearBulkBtn").addEventListener("click",()=>{
+    $("bulkPaste").value="";
+    $("sheetFile").value="";
+    bulkRows=[];
+    $("bulkConfig").style.display="none";
   });
   $("bulkHasHeader").addEventListener("change", renderBulkTable);
   $("bulkTextCol").addEventListener("change", renderBulkTable);
@@ -813,207 +982,32 @@ const DEFAULT_INSTR =
     if(chunks.length===0) chunks.push(text);
     return chunks;
   }
-const PRONUNCIATION_MAP = {
-  "青木 純二": "あおき じゅんじ",
-  "青木 秀紀": "あおき ひでのり",
-  "荒巻 豊志": "あらまき とよし",
-  "飯田 高明": "いいだ たかあき",
-  "井之上 勇": "いのうえ いさむ",
-  "石綿 夏委也": "いしわた なつや",
-  "石関 直子": "いしぜき なおこ",
-  "伊東 潤": "いとう じゅん",
-  "稲垣 満": "いながき みつる",
-  "今井 宏": "いまい ひろし",
-  "緒方 隼平": "おがた しゅんぺい",
-  "荻野 文子": "おぎの あやこ",
-  "沖田 一希": "おきた かずき",
-  "大岩 秀樹": "おおいわ ひでき",
-  "大西 哲男": "おおにし てつお",
-  "大吉 巧馬": "おおよし たくま",
-  "香川 龍志郎": "かがわ りゅうしろう",
-  "笠原 邦彦": "かさはら くにひこ",
-  "加藤 和樹": "かとう かずき",
-  "金谷 俊一郎": "かなや しゅんいちろう",
-  "鎌田 真彰": "かまだ まさあき",
-  "河合 正人": "かわい まさと",
-  "岸 良祐": "きし りょうすけ",
-  "樹葉 瑛士": "きば えいじ",
-  "清水 雅博": "しみず まさひろ",
-  "清水 哲也": "しみず てつや",
-  "慎 一之": "しん はじめ",
-  "志田 晶": "しだ あきら",
-  "澤村 光弘": "さわむら みつひろ",
-  "坂井 真弥": "さかい まや",
-  "三羽 邦美": "みわ くにみ",
-  "三宅 唯": "みやけ ゆい",
-  "宮崎 尊": "みやざき たける",
-  "宮嶋 俊和": "みやじま としかず",
-  "宮内 舞子": "みやうち まいこ",
-  "村瀬 哲史": "むらせ さとし",
-  "武藤 一也": "むとう かずや",
-  "水谷 千治": "みずたに ちはる",
-  "やまぐち 健一": "やまぐち けんいち",
-  "山口 学": "やまぐち まなぶ",
-  "山中 裕典": "やまなか ひろのり",
-  "山之内 聖拡": "やまのうち せいこう",
-  "永井 玲衣": "ながい れい",
-  "長岡 恭史": "ながおか やすふみ",
-  "長谷川 晃": "はせがわ あきら",
-  "西田 昌史": "にしだ まさし",
-  "西原 剛": "にしはら つよし",
-  "ニック・ノートン": "ニック・ノートン",
-  "野村 静": "のむら しずか",
-  "橋元 淳一郎": "はしもと じゅんいちろう",
-  "橋爪 健作": "はしづめ けんさく",
-  "原田 知也": "はらだ ともや",
-  "林 修": "はやし おさむ",
-  "樋口 裕一": "ひぐち ゆういち",
-  "福崎 伍郎": "ふくざき ごろう",
-  "富井 健二": "とみい けんじ",
-  "寺師 貴憲": "てらし たかのり",
-  "寺田 英智": "てらだ ひでとも",
-  "土岐田 健太": "ときた けんた",
-  "田部 眞弥": "たべ しんや",
-  "立脇 香奈": "たてわき かな",
-  "駒橋 輝圭": "こまはし てるよし",
-  "輿水 淳一": "こしみず じゅんいち",
-  "苑田 尚之": "そのだ なおゆき",
-  "宗 慶二": "そう けいじ",
-  "住吉 千波": "すみよし ちなみ"
-};
 
-const SURNAME_PRONUNCIATION_MAP = {
-  "青木": "あおき",
-  "荒巻": "あらまき",
-  "飯田": "いいだ",
-  "井之上": "いのうえ",
-  "石綿": "いしわた",
-  "石関": "いしぜき",
-  "伊東": "いとう",
-  "稲垣": "いながき",
-  "今井": "いまい",
-  "緒方": "おがた",
-  "荻野": "おぎの",
-  "沖田": "おきた",
-  "大岩": "おおいわ",
-  "大西": "おおにし",
-  "大吉": "おおよし",
-  "香川": "かがわ",
-  "笠原": "かさはら",
-  "加藤": "かとう",
-  "金谷": "かなや",
-  "鎌田": "かまだ",
-  "河合": "かわい",
-  "岸": "きし",
-  "樹葉": "きば",
-  "清水": "しみず",
-  "慎": "しん",
-  "志田": "しだ",
-  "澤村": "さわむら",
-  "坂井": "さかい",
-  "三羽": "みわ",
-  "三宅": "みやけ",
-  "宮崎": "みやざき",
-  "宮嶋": "みやじま",
-  "宮内": "みやうち",
-  "村瀬": "むらせ",
-  "武藤": "むとう",
-  "水谷": "みずたに",
-  "やまぐち": "やまぐち",
-  "山口": "やまぐち",
-  "山中": "やまなか",
-  "山之内": "やまのうち",
-  "永井": "ながい",
-  "長岡": "ながおか",
-  "長谷川": "はせがわ",
-  "西田": "にしだ",
-  "西原": "にしはら",
-  "野村": "のむら",
-  "橋元": "はしもと",
-  "橋爪": "はしづめ",
-  "原田": "はらだ",
-  "林": "はやし",
-  "樋口": "ひぐち",
-  "福崎": "ふくざき",
-  "富井": "とみい",
-  "寺師": "てらし",
-  "寺田": "てらだ",
-  "土岐田": "ときた",
-  "田部": "たべ",
-  "立脇": "たてわき",
-  "駒橋": "こまはし",
-  "輿水": "こしみず",
-  "苑田": "そのだ",
-  "宗": "そう",
-  "住吉": "すみよし"
-};
-
-function escapeRegExp(s){
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-}
-
-function normalizePronunciationText(text){
-  let normalized = String(text ?? "");
-
-  // （笑）は画面上の本文には残すが、音声化時だけ無視する
-  normalized = normalized
-    .replace(/（笑）/g, "")
-    .replace(/\(笑\)/g, "")
-    .replace(/（笑/g, "")
-    .replace(/\(笑/g, "");
-
-  // 特別な読み方
-  normalized = normalized.replace(/志作文/g, "こころざしさくぶん");
-  normalized = normalized.replace(/一橋/g, "ひとつばし");
-  normalized = normalized.replace(/先生/g, "せんせい");
-
-  // フルネームを先に変換
-  const fullNames = Object.entries(PRONUNCIATION_MAP)
-    .sort((a,b) => b[0].length - a[0].length);
-
-  fullNames.forEach(([name, reading]) => {
-    normalized = normalized.replace(
-      new RegExp(escapeRegExp(name), "g"),
-      reading
-    );
-
-    normalized = normalized.replace(
-      new RegExp(escapeRegExp(name.replace(/\s+/g, "")), "g"),
-      reading
-    );
-  });
-
-  // 苗字だけの場合も変換
-  const surnames = Object.entries(SURNAME_PRONUNCIATION_MAP)
-    .sort((a,b) => b[0].length - a[0].length);
-
-  surnames.forEach(([surname, reading]) => {
-    normalized = normalized.replace(
-      new RegExp(escapeRegExp(surname), "g"),
-      reading
-    );
-  });
-
-  return normalized;
-}
   function buildPrompt(chunk){
-  const ttsChunk = normalizePronunciationText(chunk);
+    return $("tplScene").value+"\n\n"+$("tplContext").value+"\n\n"+$("tplInstr").value+"\n\n【本文】\n"+chunk;
+  }
 
-  return $("tplScene").value +
-    "\n\n" +
-    $("tplContext").value +
-    "\n\n" +
-    $("tplInstr").value +
-    "\n\n【本文】\n" +
-    ttsChunk;
-}
+  /* ---------- TTS API call / strict rate-limit detection ---------- */
+  function isRateLimitError(status, detail){
+    const lc=String(detail||"").toLowerCase();
+    // Project切替対象は「レート制限」として返されたHTTP 429のみ。
+    // 401/403/400/500/503等は別Projectへ切り替えない。
+    return status===429 && (
+      lc.indexOf("resource_exhausted")!==-1 ||
+      lc.indexOf("rate_limit")!==-1 ||
+      lc.indexOf("rate limit")!==-1 ||
+      lc.indexOf("quota")!==-1 ||
+      lc.indexOf("too many requests")!==-1 ||
+      lc.length===0
+    );
+  }
 
-  /* ---------- ③ Gemini API call with quota detection ---------- */
-  async function callGeminiTTS(promptText,voiceName,apiKey){
-    const url="https://generativelanguage.googleapis.com/v1beta/models/"+MODEL+":generateContent";
+  async function callGeminiTTS(promptText,voiceName,project){
+    const model=selectedModel();
+    const url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent";
     const resp=await fetch(url,{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      headers:{"Content-Type":"application/json","x-goog-api-key":project.apiKey},
       body:JSON.stringify({
         contents:[{parts:[{text:promptText}]}],
         generationConfig:{
@@ -1022,21 +1016,26 @@ function normalizePronunciationText(text){
         }
       })
     });
+
     if(!resp.ok){
       let detail="";
-      try{ detail=(await resp.text()).slice(0,500); }catch(e){}
-      const lc=detail.toLowerCase();
-      const isQuota=resp.status===429||lc.indexOf("resource_exhausted")!==-1||lc.indexOf("quota")!==-1||lc.indexOf("rate_limit")!==-1;
-      const err=new Error(isQuota
-        ? "⚠ このAPIキーの1日の利用上限に達しました（HTTP "+resp.status+"）。別のAPIキーに切り替えて再試行してください。"
-        : "APIエラー ("+resp.status+") "+detail);
-      err.isQuotaError=isQuota;
+      try{ detail=(await resp.text()).slice(0,1000); }catch(e){}
+      const rateLimited=isRateLimitError(resp.status,detail);
+      const err=new Error(
+        rateLimited
+          ? "レート制限に達しました（HTTP 429）。次のProjectへ切り替えます。"
+          : "APIエラー ("+resp.status+") "+detail
+      );
+      err.isRateLimitError=rateLimited;
+      err.httpStatus=resp.status;
+      err.detail=detail;
       throw err;
     }
+
     const data=await resp.json();
-    const part=data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0];
+    const part=data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts.find(p=>p&&p.inlineData);
     const inline=part&&part.inlineData;
-    if(!inline||!inline.data) throw new Error("音声データが返されませんでした。本文の内容を確認してください。");
+    if(!inline||!inline.data) throw new Error("音声データが返されませんでした。本文・モデルID・音声名を確認してください。");
     let sampleRate=24000;
     const m=(inline.mimeType||"").match(/rate=(\d+)/);
     if(m) sampleRate=parseInt(m[1],10);
@@ -1085,27 +1084,59 @@ function normalizePronunciationText(text){
   }
 
   /* ---------- generation pipeline ---------- */
-  // 戻り値: true=成功/失敗(続行可), "quota"=上限超過(一括停止)
-  async function generateAudioForItem(item){
-    const apiKey=apiKeyInput.value.trim();
-    if(!apiKey){ toast("APIキーを入力してください"); return true; }
+  async function generateAudioForItem(item, options={}){
+    const isBatch=!!options.batch;
     if(!item.text.trim()){ toast("本文が空です"); return true; }
+
+    if(isBatch && !batchPoolPrepared) resetProjectRateLimits();
+    const initialProject=getUsableProject();
+    if(!initialProject){ 
+      item.status="error"; item.error="使用可能なProject / API Keyがありません。APIキーを確認してください。";
+      item.progressText=""; updateItemCard(item); return "no-key";
+    }
 
     item.status="processing"; item.error=null; item.isQuotaError=false; item.progressText="";
     updateItemCard(item);
 
     try{
       const voiceName=item.gender==="male"?"Charon":"Aoede";
-      const chunkSizeRaw=parseInt($("chunkSize").value,10);
-      const maxChars=(chunkSizeRaw===0)?Infinity:(chunkSizeRaw||1000);
+      const maxChars=parseInt($("chunkSize").value,10)||600;
       const chunks=chunkText(item.text,maxChars);
       const byteChunks=[]; let sampleRate=24000;
 
       for(let i=0;i<chunks.length;i++){
-        item.progressText=chunks.length>1?("音声生成中 ("+(i+1)+"/"+chunks.length+")"):"音声生成中…";
-        updateItemCard(item);
-        const result=await callGeminiTTS(buildPrompt(chunks[i]),voiceName,apiKey);
-        byteChunks.push(result.bytes); sampleRate=result.sampleRate;
+        let attempts=0;
+        let generated=false;
+
+        while(!generated){
+          const project=getUsableProject();
+          if(!project) throw new Error("登録したProjectがすべてレート制限中です。別のProjectを追加するか、時間を置いて再試行してください。");
+
+          item.progressText=chunks.length>1
+            ? ("音声生成中 ("+(i+1)+"/"+chunks.length+") / "+project.name)
+            : ("音声生成中… / "+project.name);
+          updateItemCard(item);
+
+          try{
+            const result=await callGeminiTTS(buildPrompt(chunks[i]),voiceName,project);
+            byteChunks.push(result.bytes); sampleRate=result.sampleRate;
+            generated=true;
+          }catch(err){
+            if(err&&err.isRateLimitError){
+              attempts++;
+              const next=switchToNextProject();
+              if(!next){
+                throw new Error("すべてのProjectがレート制限中です。現在の処理を停止しました。");
+              }
+              // 同じチャンクを次Projectで再試行
+              continue;
+            }
+            // 401/403/400/500/503等では切替せず、そのまま失敗
+            throw err;
+          }
+
+          if(attempts>projects.length) throw new Error("Project切替回数が上限に達しました。");
+        }
       }
 
       const pcm=concatBytes(byteChunks);
@@ -1132,40 +1163,44 @@ function normalizePronunciationText(text){
 
     }catch(err){
       item.status="error";
-      item.isQuotaError=!!(err&&err.isQuotaError);
+      item.isQuotaError=!!(err&&err.isRateLimitError);
       item.error=(err&&err.message)?err.message:String(err);
       item.progressText="";
       updateItemCard(item);
-      if(item.isQuotaError){ showQuotaBanner(); return "quota"; }
+      if(item.isQuotaError){ showQuotaBanner(); return "rate-limit"; }
       return true;
     }
   }
 
   $("generateAllBtn").addEventListener("click", async ()=>{
     if(items.length===0){ toast("追加された体験記がありません"); return; }
-    const apiKey=apiKeyInput.value.trim();
-    if(!apiKey){ toast("APIキーを入力してください"); return; }
+
+    const hasKey=projects.some(p=>p.apiKey.trim());
+    if(!hasKey){ toast("Project / API Keyを1件以上登録してください"); return; }
 
     const btn=$("generateAllBtn");
     btn.disabled=true;
-    // done以外 + エラーも再試行対象
+    resetProjectRateLimits();
+
+    // done以外を処理。全件完了済みなら全件再生成。
     const targets=items.filter(it=>it.status!=="done");
-    if(targets.length===0){
-      // 全件完了済み → 全件再生成モード
-      targets.push(...items);
-    }
-    let done=0, stoppedByQuota=false;
+    if(targets.length===0) targets.push(...items);
+
+    let done=0;
     batchProgressEl.style.width="0%";
+
     for(const item of targets){
-      const result=await generateAudioForItem(item);
+      const result=await generateAudioForItem(item,{batch:true});
       done++;
       batchProgressEl.style.width=Math.round((done/targets.length)*100)+"%";
-      if(result==="quota"){ stoppedByQuota=true; break; }
+      if(result==="no-key" || result==="rate-limit") break;
     }
+
     btn.disabled=false;
-    if(stoppedByQuota){
-      toast("APIキーの上限に達しました。別のキーに切り替えて再試行してください。");
-    } else {
+    const remaining=items.filter(it=>it.status!=="done").length;
+    if(remaining>0){
+      toast("未完了 "+remaining+"件。レート制限中のProjectは自動的に除外しています。");
+    }else{
       toast("全件の処理が完了しました");
     }
     setTimeout(()=>{ batchProgressEl.style.width="0%"; },1800);
